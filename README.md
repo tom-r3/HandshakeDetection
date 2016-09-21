@@ -1,1 +1,1 @@
-This proejct contains code to be run on the Pebble watch itself.
+Repository for application to be run on the watch.
