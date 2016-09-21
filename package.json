@@ -1,0 +1,24 @@
+{
+    "author": "marcusedwards@hotmail.ca",
+    "dependencies": {},
+    "keywords": [],
+    "name": "leadme",
+    "pebble": {
+        "displayName": "Leadme",
+        "enableMultiJS": true,
+        "messageKeys": {
+            "message": 1,
+            "status": 0
+        },
+        "projectType": "native",
+        "resources": {
+            "media": []
+        },
+        "sdkVersion": "3",
+        "uuid": "012c6b1a-b803-47c7-83be-aefa4a99af9e",
+        "watchapp": {
+            "watchface": false
+        }
+    },
+    "version": "1.0.0"
+}
