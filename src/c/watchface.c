@@ -1,5 +1,7 @@
 #include <pebble.h>
 
+#define WORKER_LEADS 0
+
 static Window *s_main_window;
 static TextLayer *s_time_layer;
 static TextLayer *s_lead_layer;
@@ -22,6 +24,26 @@ static void update_time() {
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_time();
+}
+
+static void worker_launcher(){
+  int result = app_worker_launch();
+  /* 
+   * need to implement error checking here, left for now to get basic functionality
+   */
+  APP_LOG(APP_LOG_LEVEL_INFO, "Result: %d", result);
+}
+
+static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
+  if(type == WORKER_LEADS) { 
+    // Read lead info from worker's packet
+    int leads = data->data0;
+
+    // Show to user in TextLayer
+    static char s_buffer[32];
+    snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
+    text_layer_set_text(s_lead_layer, s_buffer);
+  }
 }
 
 static void main_window_load(Window *window) {
@@ -56,7 +78,7 @@ static void main_window_load(Window *window) {
   text_layer_set_background_color(s_lead_layer, GColorClear);
   text_layer_set_text_color(s_lead_layer, GColorBlack);
   text_layer_set_text(s_lead_layer, "Leads: 0");
-  text_layer_set_font(s_lead_layer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
+  text_layer_set_font(s_lead_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
   text_layer_set_text_alignment(s_lead_layer, GTextAlignmentCenter);
 
   // Add logo to window
@@ -100,10 +122,20 @@ static void init() {
   
   // Make sure the time is displayed from the start
   update_time();
+  
+  // Launch the background worker that monitors the accelerometer
+  worker_launcher();
+  
+  // Subscribe to Worker messages
+  app_worker_message_subscribe(worker_message_handler);
 }
 
 static void deinit() {
+  // Destroy main window
   window_destroy(s_main_window);
+  
+  // No more worker updates
+  app_worker_message_unsubscribe();
 }
 
 int main(void) {
