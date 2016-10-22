@@ -136,6 +136,10 @@ static void deinit() {
   
   // No more worker updates
   app_worker_message_unsubscribe();
+  
+  /*
+   * Do I need to kill the background worker here?
+   */
 }
 
 int main(void) {
