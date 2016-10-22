@@ -1,21 +1,30 @@
 {
-    "author": "marcusedwards@hotmail.ca",
+    "author": "tom_r3@hotmail.com",
     "dependencies": {},
     "keywords": [],
     "name": "leadme",
     "pebble": {
         "displayName": "Leadme",
         "enableMultiJS": true,
-        "messageKeys": {
-            "message": 1,
-            "status": 0
-        },
+        "messageKeys": [],
         "projectType": "native",
         "resources": {
-            "media": []
+            "media": [
+                {
+                    "file": "images/LOGO",
+                    "name": "BITMAP_LOGO",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                }
+            ]
         },
         "sdkVersion": "3",
-        "uuid": "012c6b1a-b803-47c7-83be-aefa4a99af9e",
+        "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk"
+        ],
+        "uuid": "64689d68-d182-4bcb-aad1-340d64beb436",
         "watchapp": {
             "watchface": false
         }
