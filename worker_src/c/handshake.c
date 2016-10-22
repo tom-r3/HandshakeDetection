@@ -5,20 +5,30 @@
 
 // Need something to send foreground app
 static uint16_t s_leads = 0;
+// Change this to adjust the handshake sensivity
+static int y_sensitivity = 800;
+// Change this to adjust the allowed time between handshakes
+static int min_handshake_interval = 2000;
 
-static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
-  // Update leads
-  s_leads++;
+static void accel_data_handler(AccelData* data, uint32_t num_samples) {
+  // Calculate the acceleration
+   int y_gesture = data[num_samples - 1].y - data[0].y;
   
+  if(y_gesture > y_sensitivity){
+    // Update leads
+    s_leads++;
   
-  // Construct a data packet
-  AppWorkerMessage msg_data = {
-    .data0 = s_leads
-  };
+    // Construct a data packet
+    AppWorkerMessage msg_data = {
+      .data0 = s_leads
+    };
 
-  // Send the data to the foreground app
-  app_worker_send_message(SOURCE_BACKGROUND, &msg_data);
-  
+    // Send the data to the foreground app
+    app_worker_send_message(SOURCE_BACKGROUND, &msg_data);
+    
+    //sleep to avoid double counts
+    psleep(min_handshake_interval);
+  }
 }
 
 static void worker_message_handler(uint16_t type, 
@@ -40,15 +50,15 @@ static void worker_init() {
   // Subscribe to get AppWorkerMessages
   app_worker_message_subscribe(worker_message_handler);
   
-  // Subscribe to tap events
-  accel_tap_service_subscribe(accel_tap_handler);
+  // Subscribe to accelerometer data
+  accel_data_service_subscribe(5, accel_data_handler);
 }
 
 static void worker_deinit() {
   //do I need to unsubscribe from worker message here?
   
-  // Unsubscribe from tap events
-  accel_tap_service_unsubscribe();
+  // Unsubscribe from accelerometer data
+  accel_data_service_unsubscribe();
 }
 
 int main(void) {
