@@ -1,6 +1,7 @@
 #include <pebble.h>
 
-#define WORKER_LEADS 0
+#define SOURCE_FOREGROUND 0
+#define SOURCE_BACKGROUND 1
 
 static Window *s_main_window;
 static TextLayer *s_time_layer;
@@ -22,6 +23,16 @@ static void update_time() {
   text_layer_set_text(s_time_layer, s_buffer);
 }
 
+static void update_leads(){
+  // Construct a message to send
+  AppWorkerMessage message = {
+    .data0 = 0
+  };
+
+  // Send dummy data to background app to request a lead update
+  app_worker_send_message(SOURCE_FOREGROUND, &message);
+}
+
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_time();
 }
@@ -35,8 +46,7 @@ static void worker_launcher(){
 }
 
 static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
-  if(type == WORKER_LEADS) { 
-    // Read lead info from worker's packet
+  if(type == SOURCE_BACKGROUND) {     
     int leads = data->data0;
 
     // Show to user in TextLayer
@@ -77,7 +87,8 @@ static void main_window_load(Window *window) {
   // Improve the layout to be more like a watchface
   text_layer_set_background_color(s_lead_layer, GColorClear);
   text_layer_set_text_color(s_lead_layer, GColorBlack);
-  text_layer_set_text(s_lead_layer, "Leads: 0");
+  // Ensure the correct number of leads are displayed when the app is relaunched
+  update_leads(); 
   text_layer_set_font(s_lead_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
   text_layer_set_text_alignment(s_lead_layer, GTextAlignmentCenter);
 
@@ -87,7 +98,6 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_time_layer));
   // Add leads as a child layer to the Window's root layer
   layer_add_child(window_layer, text_layer_get_layer(s_lead_layer));
-  
 }
 
 static void main_window_unload(Window *window) {
@@ -128,6 +138,9 @@ static void init() {
   
   // Subscribe to Worker messages
   app_worker_message_subscribe(worker_message_handler);
+  
+  // Make sure the number of leads are displayed from the start
+  text_layer_set_text(s_lead_layer, "Leads: 0");
 }
 
 static void deinit() {
