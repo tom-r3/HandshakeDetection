@@ -9,6 +9,58 @@ static TextLayer *s_lead_layer;
 static BitmapLayer *s_logo_layer;
 static GBitmap *s_logo_bitmap;
 
+static void message_phone(){
+  // Declare the dictionary's iterator
+  DictionaryIterator *out_iter;
+
+  // Prepare the outbox buffer for this message
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  if(result == APP_MSG_OK) {
+    // A dummy value
+    int value = 0;
+
+    // Add an item to signify a new lead
+    dict_write_int(out_iter, MESSAGE_KEY_NewLead, &value, sizeof(int), true);
+    
+    // Send this message
+    result = app_message_outbox_send();
+    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
+    /* Remember to write these later on! */
+    
+    // Check the result
+    if(result != APP_MSG_OK) {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+        static char s_buffer[32];
+        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
+        text_layer_set_text(s_lead_layer, s_buffer);
+    }
+  }
+  else {
+    // The outbox cannot be used right now
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+      static char s_buffer[32];
+      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
+      text_layer_set_text(s_lead_layer, s_buffer);
+  }
+}
+
+static void outbox_sent_callback(DictionaryIterator *iter, void *context) {
+  // The message just sent has been successfully delivered
+  static char s_buffer[32];
+  snprintf(s_buffer, sizeof(s_buffer), "SentSucc");
+  text_layer_set_text(s_lead_layer, s_buffer);
+}
+
+static void outbox_failed_callback(DictionaryIterator *iter,
+                                      AppMessageResult reason, void *context) {
+  // The message just sent failed to be delivered
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Message send failed. Reason: %d", (int)reason);
+    static char s_buffer[32];
+    snprintf(s_buffer, sizeof(s_buffer), "sendFail");
+    text_layer_set_text(s_lead_layer, s_buffer);
+}
+
 static void update_time() {
   // Get a tm structure
   time_t temp = time(NULL);
@@ -49,10 +101,13 @@ static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
   if(type == SOURCE_BACKGROUND) {     
     int leads = data->data0;
 
-    // Show to user in TextLayer
+    // Show new lead to user in TextLayer
     static char s_buffer[32];
     snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
     text_layer_set_text(s_lead_layer, s_buffer);
+    
+    // Message phone to update server
+    message_phone();
   }
 }
 
@@ -141,6 +196,14 @@ static void init() {
   
   // Make sure the number of leads are displayed from the start
   text_layer_set_text(s_lead_layer, "Leads: 0");
+  
+  // Set up Appmessage
+  const uint32_t inbox_size = 32;
+  const uint32_t outbox_size = inbox_size;
+  app_message_open(inbox_size, outbox_size);
+  // Register to be notified about outbox events
+  app_message_register_outbox_sent(outbox_sent_callback);
+  app_message_register_outbox_failed(outbox_failed_callback);
 }
 
 static void deinit() {

@@ -1,12 +1,17 @@
 {
     "author": "tom_r3@hotmail.com",
-    "dependencies": {},
+    "dependencies": {
+        "cordova-pebble": "0.0.3"
+    },
     "keywords": [],
     "name": "leadme",
     "pebble": {
         "displayName": "Leadme",
         "enableMultiJS": true,
-        "messageKeys": [],
+        "messageKeys": [
+            "JSReady",
+            "NewLead"
+        ],
         "projectType": "native",
         "resources": {
             "media": [
@@ -24,7 +29,7 @@
             "basalt",
             "chalk"
         ],
-        "uuid": "64689d68-d182-4bcb-aad1-340d64beb436",
+        "uuid": "ca3bd34b-6ccb-4b5a-8557-ab1b479cc106",
         "watchapp": {
             "watchface": false
         }
