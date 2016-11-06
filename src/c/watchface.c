@@ -31,6 +31,7 @@ static void message_phone(){
     // Check the result
     if(result != APP_MSG_OK) {
       APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+        /* REMOVE THIS IN FINAL VERSION */
         static char s_buffer[32];
         snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
         text_layer_set_text(s_lead_layer, s_buffer);
@@ -39,6 +40,7 @@ static void message_phone(){
   else {
     // The outbox cannot be used right now
     APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+      /* REMOVE THIS IN FINAL VERSION */
       static char s_buffer[32];
       snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
       text_layer_set_text(s_lead_layer, s_buffer);
@@ -47,18 +49,22 @@ static void message_phone(){
 
 static void outbox_sent_callback(DictionaryIterator *iter, void *context) {
   // The message just sent has been successfully delivered
-  static char s_buffer[32];
-  snprintf(s_buffer, sizeof(s_buffer), "SentSucc");
-  text_layer_set_text(s_lead_layer, s_buffer);
+  /*
+   * No sense in updating leads here, it is updated by worker message right before message
+   * phone is called 
+   *
+   */
 }
 
 static void outbox_failed_callback(DictionaryIterator *iter,
                                       AppMessageResult reason, void *context) {
   // The message just sent failed to be delivered
   APP_LOG(APP_LOG_LEVEL_ERROR, "Message send failed. Reason: %d", (int)reason);
-    static char s_buffer[32];
-    snprintf(s_buffer, sizeof(s_buffer), "sendFail");
-    text_layer_set_text(s_lead_layer, s_buffer);
+  
+  /* REMOVE THIS IN FINAL VERSION */
+  static char s_buffer[32];
+  snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", reason);
+  text_layer_set_text(s_lead_layer, s_buffer);
 }
 
 static void update_time() {
