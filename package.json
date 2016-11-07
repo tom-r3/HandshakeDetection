@@ -10,7 +10,8 @@
         "enableMultiJS": true,
         "messageKeys": [
             "JSReady",
-            "NewLead"
+            "NewLead",
+            "ResetLeads"
         ],
         "projectType": "native",
         "resources": {

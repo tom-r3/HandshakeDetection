@@ -1,7 +1,8 @@
 #include <pebble.h>
 
-#define SOURCE_FOREGROUND 0
+#define REQUEST_LEAD_COUNT 0
 #define SOURCE_BACKGROUND 1
+#define RESET_LEAD_COUNT 2
 
 static Window *s_main_window;
 static TextLayer *s_time_layer;
@@ -9,7 +10,9 @@ static TextLayer *s_lead_layer;
 static BitmapLayer *s_logo_layer;
 static GBitmap *s_logo_bitmap;
 
-static void message_phone(){
+/******************** AppMessage **************************/
+
+static void mobileapp_add_lead(){
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
 
@@ -22,6 +25,44 @@ static void message_phone(){
 
     // Add an item to signify a new lead
     dict_write_int(out_iter, MESSAGE_KEY_NewLead, &value, sizeof(int), true);
+    
+    // Send this message
+    result = app_message_outbox_send();
+    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
+    /* Remember to write these later on! */
+    
+    // Check the result
+    if(result != APP_MSG_OK) {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+        /* REMOVE THIS IN FINAL VERSION */
+        static char s_buffer[32];
+        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
+        text_layer_set_text(s_lead_layer, s_buffer);
+    }
+  }
+  else {
+    // The outbox cannot be used right now
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+      /* REMOVE THIS IN FINAL VERSION */
+      static char s_buffer[32];
+      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
+      text_layer_set_text(s_lead_layer, s_buffer);
+  }
+}
+/* add_lead and reset_leads reuse a lot of code, clean this up */
+static void mobileapp_reset_leads(){
+  // Declare the dictionary's iterator
+  DictionaryIterator *out_iter;
+
+  // Prepare the outbox buffer for this message
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  if(result == APP_MSG_OK) {
+    // A dummy value
+    int value = 0;
+
+    // Add an item to signify a new lead
+    dict_write_int(out_iter, MESSAGE_KEY_ResetLeads, &value, sizeof(int), true);
     
     // Send this message
     result = app_message_outbox_send();
@@ -67,6 +108,75 @@ static void outbox_failed_callback(DictionaryIterator *iter,
   text_layer_set_text(s_lead_layer, s_buffer);
 }
 
+/******************* Background Worker ********************/
+
+static void update_leads(){
+  // Construct a message to send
+  AppWorkerMessage message = {
+    .data0 = 0
+  };
+
+  // Send dummy data to background app to request a lead update
+  app_worker_send_message(REQUEST_LEAD_COUNT, &message);
+}
+
+static void reset_leads(){
+  // Construct a message to send
+  AppWorkerMessage message = {
+    .data0 = 0
+  };
+
+  // Send dummy data to background app to request a lead update
+  app_worker_send_message(RESET_LEAD_COUNT, &message);
+}
+
+static void worker_launcher(){
+  int result = app_worker_launch();
+  /* 
+   * need to implement error checking here, left for now to get basic functionality
+   */
+  APP_LOG(APP_LOG_LEVEL_INFO, "Result: %d", result);
+}
+
+/* Calls mobileapp_add_lead */
+static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
+  if(type == SOURCE_BACKGROUND) {     
+    int leads = data->data0;
+
+    // Show new lead to user in TextLayer
+    static char s_buffer[32];
+    snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
+    text_layer_set_text(s_lead_layer, s_buffer);
+    
+    // Message phone to update server
+    mobileapp_add_lead();
+  }
+}
+
+/******************** Click Handlers ***********************/
+
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Start voice dictation UI
+  text_layer_set_text(s_lead_layer, "Click");
+}
+
+static void select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Reset Lead Counter on Watch
+  reset_leads();
+  /* ADD CODE TO RESET LEAD COUNTER ON PHONE */
+}
+
+static void click_config_provider(void *context) {
+  ButtonId id = BUTTON_ID_SELECT;  // The select button
+  uint16_t delay_ms = 500;         // Minimum time pressed to fire
+
+  // Click handlers for single press and long press
+  window_single_click_subscribe(id, select_click_handler); //start audio capture
+  window_long_click_subscribe(id, delay_ms, NULL, select_long_click_handler); //reset lead counter
+}
+
+/****************** Watchface *****************************/
+
 static void update_time() {
   // Get a tm structure
   time_t temp = time(NULL);
@@ -81,40 +191,8 @@ static void update_time() {
   text_layer_set_text(s_time_layer, s_buffer);
 }
 
-static void update_leads(){
-  // Construct a message to send
-  AppWorkerMessage message = {
-    .data0 = 0
-  };
-
-  // Send dummy data to background app to request a lead update
-  app_worker_send_message(SOURCE_FOREGROUND, &message);
-}
-
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_time();
-}
-
-static void worker_launcher(){
-  int result = app_worker_launch();
-  /* 
-   * need to implement error checking here, left for now to get basic functionality
-   */
-  APP_LOG(APP_LOG_LEVEL_INFO, "Result: %d", result);
-}
-
-static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
-  if(type == SOURCE_BACKGROUND) {     
-    int leads = data->data0;
-
-    // Show new lead to user in TextLayer
-    static char s_buffer[32];
-    snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
-    text_layer_set_text(s_lead_layer, s_buffer);
-    
-    // Message phone to update server
-    message_phone();
-  }
 }
 
 static void main_window_load(Window *window) {
@@ -133,7 +211,7 @@ static void main_window_load(Window *window) {
 
   // Create the TextLayer with specific bounds
   s_time_layer = text_layer_create(
-      GRect(0, PBL_IF_ROUND_ELSE(6, 0), bounds.size.w, 50));
+      GRect(0, PBL_IF_ROUND_ELSE(10, 0), bounds.size.w, 50));
 
   // Improve the layout to be more like a watchface
   text_layer_set_background_color(s_time_layer, GColorClear);
@@ -143,7 +221,7 @@ static void main_window_load(Window *window) {
   
   // Create the TextLayer with specific bounds
   s_lead_layer = text_layer_create(
-      GRect(0, PBL_IF_ROUND_ELSE(120, 130), bounds.size.w, 50));
+      GRect(0, PBL_IF_ROUND_ELSE(130, 130), bounds.size.w, 50));
 
   // Improve the layout to be more like a watchface
   text_layer_set_background_color(s_lead_layer, GColorClear);
@@ -175,6 +253,8 @@ static void main_window_unload(Window *window) {
   bitmap_layer_destroy(s_logo_layer);
 }
 
+/***************** App ************************************/
+
 static void init() {
   // Register with TickTimerService
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
@@ -182,6 +262,9 @@ static void init() {
   // Create main Window element and assign to pointer
   s_main_window = window_create();
 
+  // Register the click config provider that starts dictation
+  window_set_click_config_provider(s_main_window, click_config_provider);
+  
   // Set handlers to manage the elements inside the Window
   window_set_window_handlers(s_main_window, (WindowHandlers) {
     .load = main_window_load,
