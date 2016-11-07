@@ -11,7 +11,8 @@
         "messageKeys": [
             "JSReady",
             "NewLead",
-            "ResetLeads"
+            "ResetLeads",
+            "AudioCapture"
         ],
         "projectType": "native",
         "resources": {

@@ -9,9 +9,16 @@ static TextLayer *s_time_layer;
 static TextLayer *s_lead_layer;
 static BitmapLayer *s_logo_layer;
 static GBitmap *s_logo_bitmap;
+static DictationSession *s_dictation_session;
+static char s_last_text[512];
 
 /******************** AppMessage **************************/
 
+/*
+ * send audio, add_lead and reset_leads reuse a lot of code, clean this up
+ * define send reasons globally, have one function to send with an input argument
+ *
+ */
 static void mobileapp_add_lead(){
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
@@ -49,7 +56,7 @@ static void mobileapp_add_lead(){
       text_layer_set_text(s_lead_layer, s_buffer);
   }
 }
-/* add_lead and reset_leads reuse a lot of code, clean this up */
+
 static void mobileapp_reset_leads(){
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
@@ -63,6 +70,44 @@ static void mobileapp_reset_leads(){
 
     // Add an item to signify a new lead
     dict_write_int(out_iter, MESSAGE_KEY_ResetLeads, &value, sizeof(int), true);
+    
+    // Send this message
+    result = app_message_outbox_send();
+    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
+    /* Remember to write these later on! */
+    
+    // Check the result
+    if(result != APP_MSG_OK) {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+        /* REMOVE THIS IN FINAL VERSION */
+        static char s_buffer[32];
+        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
+        text_layer_set_text(s_lead_layer, s_buffer);
+    }
+  }
+  else {
+    // The outbox cannot be used right now
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+      /* REMOVE THIS IN FINAL VERSION */
+      static char s_buffer[32];
+      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
+      text_layer_set_text(s_lead_layer, s_buffer);
+  }
+}
+
+static void mobileapp_send_audio(){
+  // Declare the dictionary's iterator
+  DictionaryIterator *out_iter;
+
+  // Prepare the outbox buffer for this message
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  if(result == APP_MSG_OK) {
+    // A dummy value
+    int value = 0;
+
+    // Add an item to signify a new lead
+    dict_write_int(out_iter, MESSAGE_KEY_AudioCapture, &value, sizeof(int), true);
     
     // Send this message
     result = app_message_outbox_send();
@@ -106,6 +151,26 @@ static void outbox_failed_callback(DictionaryIterator *iter,
   static char s_buffer[32];
   snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", reason);
   text_layer_set_text(s_lead_layer, s_buffer);
+}
+
+/******************** Audio Capture ***********************/
+
+static void dictation_session_callback(DictationSession *session, DictationSessionStatus status, 
+                                       char *transcription, void *context) {
+  if(status == DictationSessionStatusSuccess) {
+    // Send audio to phone
+    mobileapp_send_audio();
+    
+    // Display text on lead layer
+    snprintf(s_last_text, sizeof(s_last_text), "%s", transcription);
+    text_layer_set_text(s_lead_layer, s_last_text);
+  } else {
+    // Display the reason for any error
+    static char s_failed_buff[128];
+    snprintf(s_failed_buff, sizeof(s_failed_buff), "Error ID: %d", (int)status);
+    text_layer_set_text(s_lead_layer, s_failed_buff);
+
+  }
 }
 
 /******************* Background Worker ********************/
@@ -153,11 +218,12 @@ static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
   }
 }
 
-/******************** Click Handlers ***********************/
+/******************** Click Handlers **********************/
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   // Start voice dictation UI
-  text_layer_set_text(s_lead_layer, "Click");
+  text_layer_set_text(s_lead_layer, "AudioCapture");
+  dictation_session_start(s_dictation_session);
 }
 
 static void select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -293,6 +359,9 @@ static void init() {
   // Register to be notified about outbox events
   app_message_register_outbox_sent(outbox_sent_callback);
   app_message_register_outbox_failed(outbox_failed_callback);
+  
+  // Create dictation session for audio capture
+  s_dictation_session = dictation_session_create(sizeof(s_last_text), dictation_session_callback, NULL);
 }
 
 static void deinit() {
@@ -301,6 +370,9 @@ static void deinit() {
   
   // No more worker updates
   app_worker_message_unsubscribe();
+  
+  // Free the last session data
+  dictation_session_destroy(s_dictation_session);
   
   /*
    * Do I need to kill the background worker here?
