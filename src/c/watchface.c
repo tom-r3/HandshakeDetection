@@ -11,6 +11,7 @@ static BitmapLayer *s_logo_layer;
 static GBitmap *s_logo_bitmap;
 static DictationSession *s_dictation_session;
 static char s_last_text[512];
+static char audio_text[512];
 
 /******************** AppMessage **************************/
 
@@ -20,6 +21,7 @@ static char s_last_text[512];
  *
  */
 static void mobileapp_add_lead(){
+
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
 
@@ -27,7 +29,7 @@ static void mobileapp_add_lead(){
   AppMessageResult result = app_message_outbox_begin(&out_iter);
   
   if(result == APP_MSG_OK) {
-    // A dummy value
+    // Add lead signal
     int value = 0;
 
     // Add an item to signify a new lead
@@ -58,6 +60,7 @@ static void mobileapp_add_lead(){
 }
 
 static void mobileapp_reset_leads(){
+
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
 
@@ -65,8 +68,8 @@ static void mobileapp_reset_leads(){
   AppMessageResult result = app_message_outbox_begin(&out_iter);
   
   if(result == APP_MSG_OK) {
-    // A dummy value
-    int value = 0;
+    // Reset lead signal
+    int value = 1;
 
     // Add an item to signify a new lead
     dict_write_int(out_iter, MESSAGE_KEY_ResetLeads, &value, sizeof(int), true);
@@ -96,6 +99,7 @@ static void mobileapp_reset_leads(){
 }
 
 static void mobileapp_send_audio(){
+
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
 
@@ -103,11 +107,9 @@ static void mobileapp_send_audio(){
   AppMessageResult result = app_message_outbox_begin(&out_iter);
   
   if(result == APP_MSG_OK) {
-    // A dummy value
-    int value = 0;
 
-    // Add an item to signify a new lead
-    dict_write_int(out_iter, MESSAGE_KEY_AudioCapture, &value, sizeof(int), true);
+    // Add message
+    dict_write_int(out_iter, MESSAGE_KEY_AudioCapture, &audio_text, sizeof(int), true);
     
     // Send this message
     result = app_message_outbox_send();
@@ -155,15 +157,20 @@ static void outbox_failed_callback(DictionaryIterator *iter,
 
 /******************** Audio Capture ***********************/
 
-static void dictation_session_callback(DictationSession *session, DictationSessionStatus status, 
-                                       char *transcription, void *context) {
+static void dictation_session_callback(DictationSession *session, DictationSessionStatus status, char *transcription, void *context) {
+
   if(status == DictationSessionStatusSuccess) {
+
     // Send audio to phone
-    mobileapp_send_audio();
+    mobileapp_send_audio(transcription);
+
+    // Write text to audio_text variable
+    snprintf(audio_text, sizeof(audio_text), "%s", transcription);
     
     // Display text on lead layer
     snprintf(s_last_text, sizeof(s_last_text), "%s", transcription);
     text_layer_set_text(s_lead_layer, s_last_text);
+
   } else {
     // Display the reason for any error
     static char s_failed_buff[128];

@@ -32,8 +32,7 @@ static void accel_data_handler(AccelData* data, uint32_t num_samples) {
   }
 }
 
-static void worker_message_handler(uint16_t type, 
-                                    AppWorkerMessage *message) {
+static void worker_message_handler(uint16_t type, AppWorkerMessage *message) {
   
   //this is used by the foreground app to request lead count
   if(type == REQUEST_LEAD_COUNT) {
