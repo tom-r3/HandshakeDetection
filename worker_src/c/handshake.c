@@ -1,8 +1,11 @@
 #include <pebble_worker.h>
 
 #define REQUEST_LEAD_COUNT 0
-#define SOURCE_BACKGROUND 1
+#define SOURCE_BACKGROUND_ADD_LEAD 1
 #define RESET_LEAD_COUNT 2
+#define SOURCE_BACKGROUND_RESET_LEADS 3
+#define SOURCE_BACKGROUND_LEAD_COUNT 4
+
 
 // Need something to send foreground app
 static uint16_t s_leads = 0;
@@ -25,14 +28,15 @@ static void accel_data_handler(AccelData* data, uint32_t num_samples) {
     };
 
     // Send the data to the foreground app
-    app_worker_send_message(SOURCE_BACKGROUND, &msg_data);
+    app_worker_send_message(SOURCE_BACKGROUND_ADD_LEAD, &msg_data);
     
     //sleep to avoid double counts
     psleep(min_handshake_interval);
   }
 }
 
-static void worker_message_handler(uint16_t type, AppWorkerMessage *message) {
+static void worker_message_handler(uint16_t type, 
+                                    AppWorkerMessage *message) {
   
   //this is used by the foreground app to request lead count
   if(type == REQUEST_LEAD_COUNT) {
@@ -42,7 +46,7 @@ static void worker_message_handler(uint16_t type, AppWorkerMessage *message) {
       };
 
       // Send the data to the foreground app
-      app_worker_send_message(SOURCE_BACKGROUND, &msg_data);
+      app_worker_send_message(SOURCE_BACKGROUND_LEAD_COUNT, &msg_data);
   }
   
     if(type == RESET_LEAD_COUNT) {
@@ -53,7 +57,7 @@ static void worker_message_handler(uint16_t type, AppWorkerMessage *message) {
       AppWorkerMessage msg_data = {
         .data0 = s_leads
       };
-      app_worker_send_message(SOURCE_BACKGROUND, &msg_data);
+      app_worker_send_message(SOURCE_BACKGROUND_RESET_LEADS, &msg_data);
   }
 }
 

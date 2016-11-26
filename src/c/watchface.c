@@ -1,8 +1,14 @@
 #include <pebble.h>
 
 #define REQUEST_LEAD_COUNT 0
-#define SOURCE_BACKGROUND 1
+#define SOURCE_BACKGROUND_ADD_LEAD 1
 #define RESET_LEAD_COUNT 2
+#define SOURCE_BACKGROUND_RESET_LEADS 3
+#define SOURCE_BACKGROUND_LEAD_COUNT 4
+
+#define NewLead 5
+#define ResetLeads 6
+#define AudioCapture 7
 
 static Window *s_main_window;
 static TextLayer *s_time_layer;
@@ -11,17 +17,10 @@ static BitmapLayer *s_logo_layer;
 static GBitmap *s_logo_bitmap;
 static DictationSession *s_dictation_session;
 static char s_last_text[512];
-static char audio_text[512];
 
 /******************** AppMessage **************************/
 
-/*
- * send audio, add_lead and reset_leads reuse a lot of code, clean this up
- * define send reasons globally, have one function to send with an input argument
- *
- */
-static void mobileapp_add_lead(){
-
+static void mobileapp_update(int type){
   // Declare the dictionary's iterator
   DictionaryIterator *out_iter;
 
@@ -29,62 +28,32 @@ static void mobileapp_add_lead(){
   AppMessageResult result = app_message_outbox_begin(&out_iter);
   
   if(result == APP_MSG_OK) {
-    // Add lead signal
+    // A dummy value
     int value = 0;
 
-    // Add an item to signify a new lead
-    dict_write_int(out_iter, MESSAGE_KEY_NewLead, &value, sizeof(int), true);
-    
-    // Send this message
-    result = app_message_outbox_send();
-    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
-    /* Remember to write these later on! */
-    
-    // Check the result
-    if(result != APP_MSG_OK) {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
-        /* REMOVE THIS IN FINAL VERSION */
-        static char s_buffer[32];
-        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
-        text_layer_set_text(s_lead_layer, s_buffer);
+    /* Set the message up according to the type */
+    if(type == NewLead){
+      dict_write_int(out_iter, MESSAGE_KEY_NewLead, &value, sizeof(int), true);
     }
-  }
-  else {
-    // The outbox cannot be used right now
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
-      /* REMOVE THIS IN FINAL VERSION */
-      static char s_buffer[32];
-      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
-      text_layer_set_text(s_lead_layer, s_buffer);
-  }
-}
-
-static void mobileapp_reset_leads(){
-
-  // Declare the dictionary's iterator
-  DictionaryIterator *out_iter;
-
-  // Prepare the outbox buffer for this message
-  AppMessageResult result = app_message_outbox_begin(&out_iter);
+    else if(type == ResetLeads){
+      dict_write_int(out_iter, MESSAGE_KEY_ResetLeads, &value, sizeof(int), true);
+    }
+    else if(type == AudioCapture){
+      dict_write_int(out_iter, MESSAGE_KEY_AudioCapture, &value, sizeof(int), true);
+    }
+    else{
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Unsupported Message Type: %d", type);
+    }
   
-  if(result == APP_MSG_OK) {
-    // Reset lead signal
-    int value = 1;
-
-    // Add an item to signify a new lead
-    dict_write_int(out_iter, MESSAGE_KEY_ResetLeads, &value, sizeof(int), true);
-    
-    // Send this message
+    // Send the message
     result = app_message_outbox_send();
-    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
-    /* Remember to write these later on! */
     
     // Check the result
     if(result != APP_MSG_OK) {
       APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
         /* REMOVE THIS IN FINAL VERSION */
         static char s_buffer[32];
-        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
+        snprintf(s_buffer, sizeof(s_buffer), "%d SendErr: %d", type, result);
         text_layer_set_text(s_lead_layer, s_buffer);
     }
   }
@@ -93,44 +62,7 @@ static void mobileapp_reset_leads(){
     APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
       /* REMOVE THIS IN FINAL VERSION */
       static char s_buffer[32];
-      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
-      text_layer_set_text(s_lead_layer, s_buffer);
-  }
-}
-
-static void mobileapp_send_audio(){
-
-  // Declare the dictionary's iterator
-  DictionaryIterator *out_iter;
-
-  // Prepare the outbox buffer for this message
-  AppMessageResult result = app_message_outbox_begin(&out_iter);
-  
-  if(result == APP_MSG_OK) {
-
-    // Add message
-    dict_write_int(out_iter, MESSAGE_KEY_AudioCapture, &audio_text, sizeof(int), true);
-    
-    // Send this message
-    result = app_message_outbox_send();
-    /* AppMessageOutboxSent or AppMessageOutboxFailed callback will be called */
-    /* Remember to write these later on! */
-    
-    // Check the result
-    if(result != APP_MSG_OK) {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
-        /* REMOVE THIS IN FINAL VERSION */
-        static char s_buffer[32];
-        snprintf(s_buffer, sizeof(s_buffer), "SendErr: %d", result);
-        text_layer_set_text(s_lead_layer, s_buffer);
-    }
-  }
-  else {
-    // The outbox cannot be used right now
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
-      /* REMOVE THIS IN FINAL VERSION */
-      static char s_buffer[32];
-      snprintf(s_buffer, sizeof(s_buffer), "PrepErr: %d", result);
+      snprintf(s_buffer, sizeof(s_buffer), "%d PrepErr: %d", type, result);
       text_layer_set_text(s_lead_layer, s_buffer);
   }
 }
@@ -157,20 +89,15 @@ static void outbox_failed_callback(DictionaryIterator *iter,
 
 /******************** Audio Capture ***********************/
 
-static void dictation_session_callback(DictationSession *session, DictationSessionStatus status, char *transcription, void *context) {
-
+static void dictation_session_callback(DictationSession *session, DictationSessionStatus status, 
+                                       char *transcription, void *context) {
   if(status == DictationSessionStatusSuccess) {
-
     // Send audio to phone
-    mobileapp_send_audio(transcription);
-
-    // Write text to audio_text variable
-    snprintf(audio_text, sizeof(audio_text), "%s", transcription);
+    mobileapp_update(AudioCapture);
     
     // Display text on lead layer
     snprintf(s_last_text, sizeof(s_last_text), "%s", transcription);
     text_layer_set_text(s_lead_layer, s_last_text);
-
   } else {
     // Display the reason for any error
     static char s_failed_buff[128];
@@ -193,6 +120,7 @@ static void update_leads(){
 }
 
 static void reset_leads(){
+  /* reset lead counter on watch */
   // Construct a message to send
   AppWorkerMessage message = {
     .data0 = 0
@@ -210,9 +138,9 @@ static void worker_launcher(){
   APP_LOG(APP_LOG_LEVEL_INFO, "Result: %d", result);
 }
 
-/* Calls mobileapp_add_lead */
+/* Calls mobileapp_add_lead and mobileapp_reset_leads */
 static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
-  if(type == SOURCE_BACKGROUND) {     
+  if(type == SOURCE_BACKGROUND_ADD_LEAD) {     
     int leads = data->data0;
 
     // Show new lead to user in TextLayer
@@ -221,7 +149,29 @@ static void worker_message_handler(uint16_t type, AppWorkerMessage *data) {
     text_layer_set_text(s_lead_layer, s_buffer);
     
     // Message phone to update server
-    mobileapp_add_lead();
+    mobileapp_update(NewLead);
+  }
+  else if(type == SOURCE_BACKGROUND_LEAD_COUNT){
+    int leads = data->data0;
+
+    // Show leads to user in TextLayer
+    static char s_buffer[32];
+    snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
+    text_layer_set_text(s_lead_layer, s_buffer);
+    
+    /* phone is not updated here as there is no lead being added */
+    
+  }  
+  else if(type == SOURCE_BACKGROUND_RESET_LEADS){
+    int leads = data->data0;
+    
+    // Set leads layer to no leads
+    static char s_buffer[32];
+    snprintf(s_buffer, sizeof(s_buffer), "Leads: %d", leads);
+    text_layer_set_text(s_lead_layer, s_buffer);
+    
+    // Message phone to update server
+    mobileapp_update(ResetLeads);
   }
 }
 
@@ -234,9 +184,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
-  // Reset Lead Counter on Watch
-  reset_leads();
-  /* ADD CODE TO RESET LEAD COUNTER ON PHONE */
+  reset_leads(); // This function calls the background worker to update leads on watch and on mobileapp
 }
 
 static void click_config_provider(void *context) {
